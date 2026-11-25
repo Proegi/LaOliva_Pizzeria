@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La Oliva Pizzeria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Cabin+Condensed:wght@500;600&family=Josefin+Sans:wght@300;400&family=Kaushan+Script&family=Caveat:wght@400;700&family=Fredoka:wght@600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9fd3f5; }
+  canvas { display: block; }
+  #start {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(20, 30, 20, .45);
+    color: #fff; cursor: pointer; user-select: none;
+    font-family: "Fredoka", Arial, sans-serif;
+  }
+  #start .big {
+    font-size: 40px; font-weight: 600;
+    background: #5fae4a; padding: 14px 40px; border-radius: 14px;
+    box-shadow: 0 6px 0 #3e7d2e;
+  }
+  #start .keys { margin-top: 26px; font-size: 17px; opacity: .95; text-align: center; line-height: 1.8; }
+  #start kbd {
+    font-family: inherit; background: #fff; color: #222; border-radius: 6px;
+    padding: 1px 9px; box-shadow: 0 3px 0 #999; margin: 0 3px;
+  }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font: 600 22px Fredoka, Arial; background: #2b3a2b; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="loading">Pizzeria wird gebacken</div>
+<div id="start" style="display:none">
+  <div class="big">Klicken zum Starten</div>
+  <div class="keys">
+    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> laufen &nbsp; <kbd>Shift</kbd> rennen &nbsp; <kbd>Leertaste</kbd> springen<br>
+    Maus umsehen &nbsp; Mausrad zoomen &nbsp; <kbd>Esc</kbd> Pause
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+
+const BW = 11, BD = 8, BH = 9.8, WT = 0.3;
+const GREEN = "#6cbf55", INK = "#2a2a2a", DESC = "#3d8530";
+const F_HEAD = '"Amatic SC"', F_ITEM = '"Cabin Condensed"', F_LOGO = '"Josefin Sans"', F_SCRIPT = '"Kaushan Script"', F_CHALK = '"Caveat"';
+
+const PIZZE = [
+  ["Marinara*", "8", "hausgemachte Tomatensauce | Knoblauch | Oregano | Basilikum"],
+  ["Margherita*", "9,5", "hausgemachte Tomatensauce | Mozzarella aus Kampanien | Basilikum"],
+  ["Provola e Pepe*", "9,5", "hausgemachte Tomatensauce | Provola affumicata | Pfeffer"],
+  ["Bufala", "13,5", "hausgemachte Tomatensauce | Mozzarella di Bufala Campana D.O.P | Basilikum"],
+  ["Spianata*", "11,5", "hausgemachte Tomatensauce | Mozzarella aus Kampanien | pikante kalabrische Salami"],
+  ["Diavola", "12", "hausgemachte Tomatensauce | Mozzarella aus Kampanien | pikante kalabrische Salami | Peperoncini"],
+  ["Salame di Manzo*", "13", "hausgemachte Tomatensauce | Mozzarella aus Kampanien | 100% Rinder-Salami (Metzgerei Harth)"],
+  ["Parma e Rucola", "14,5", "hausgemachte Tomatensauce | Mozzarella aus Kampanien | Rucola | Prosciutto di Parma D.O.P"],
+  ["Rucola e Pomodorini", "12", "hausgemachte Tomatensauce | Mozzarella aus Kampanien | Rucola | Cherrytomaten | Grana Padano"],
+  ["Prosciutto e Funghi", "12", "hausgemachte Tomatensauce | Mozzarella aus Kampanien | italienischer Kochschinken | Pilze"],
+  ["Napoli", "11", "hausgemachte Tomatensauce | handgearbeitete Sardellen | Oliven | Kapern"],
+  ["Tonno Giallo", "13,5", "gelbe Kirschtomaten vom Vesuv | Mozzarella aus Kampanien | Gelbflossen Thunfischfilets | rote Zwiebeln | Pfeffer"],
+  ["Ortolana", "11", "hausgemachte Tomatensauce | Mozzarella aus Kampanien | Zucchini | Aubergine | Paprika"],
+  ["Mortadella", "14", "Mozzarella aus Kampanien | Mortadella | Stracciatella | Pistazien"],
+  ["Salsiccia Friarielli", "15", "Provola affumicata | kalabrische Salsiccia | Friarielli"],
+  ["Patate e Cipolle", "11,5", "Mozzarella aus Kampanien | Kartoffel | Rosmarin | rote Zwiebel"],
+  ["Salame e Pepe", "12,5", "Provola affumicata | Grana Padano | Spianata | Basilikum | Pfeffer"],
+  ["Latte e Miele", "14,5", "Mozzarella aus Kampanien | Mortadella | Mozzarella di Bufala Campana D.O.P. | Honig | Basilikum"],
+  ["Panouzzo (Pizzabrot)", "5", "Olivenöl | Oregano | Salz"],
+  ["Dolce Vita", "12,5", "Nutella | Erdbeere oder Banane | auf Wunsch mit Pistazie | Buenocreme oder Lotuscreme +1 €, Pistaziencreme +2 €"]
+];
+const PIZZA_NOTE = "*Vor Ort als „ruota di carro“ (36cm) erhältlich +1,5€";
+
+const PASTA = [
+  ["Lasagna tradizionale", "14,9", "Hausgemachtes Bolognese Ragù | Hausgemachte Bechamel | Fior di Latte | Grana Padano"],
+  ["Ricotta e Spinaci", "14,9", "Hausgemachte Bechamel | Ricotta | Spinat | Grana Padano | Fior di Latte"]
+];
+const INSALATE = [
+  ["Insalata di Pomodoro", "7,5", "Tomate | rote Zwiebel (optional mit Thunfisch +3.5€)"],
+  ["Insalata Mista", "8,5", "Gemischter Salat | Tomate | Gurke | rote Zwiebel | Karotte | Paprika | Mais"],
+  ["Insalata Tonno", "13", "Gemischter Salat | Tomate | Gurke | rote Zwiebel | Karotte | Paprika | Mais | Thunfischfilet | schwarze Olive | Ei"],
+  ["Insalata Avocado", "12,5", "Gemischter Salat | Tomate | Gurke | Paprika | Avocado | schwarze Olive | Schafskäse"],
+  ["Insalata Rucola", "13", "Rucola | Cherrytomaten | Pinienkerne | Grana Padano D.O.P."],
+  ["Bufala Caprese", "13,5", "Tomaten | Mozzarella di Bufala Campana D.O.P | Basilikum | Olivenöl"]
+];
+const DRINKS = [
+  ["Softdrinks", "3,5"], ["Wasser", "3"], ["Wasser 0,5", "4"], ["Eistee 0,33L", "3,5"], ["Bier 0,5L", "4,5"],
+  ["ital. Bier 0,33L", "4"], ["Aperitif", "5"], ["Weinschorle 0,3L", "4"], ["Wein 0,375L", "13,5"]
+];
+
+const rad = d => d * Math.PI / 180;
+function makeRand(seed) { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+
+function wrap(ctx, text, maxW) {
+  const words = text.split(" ");
+  const lines = [];
+  let line = "";
+  for (const w of words) {
+    const t = line ? line + " " + w : w;
+    if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function canvas(w, h, scale) {
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(w * scale); cv.height = Math.round(h * scale);
+  const ctx = cv.getContext("2d");
+  ctx.scale(scale, scale);
+  ctx.textBaseline = "alphabetic";
+  return { cv, ctx };
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
+}
+
+function olives(ctx, w, h, seed, alpha = .28) {
+  const r = makeRand(seed);
+  ctx.save();
+  ctx.strokeStyle = `rgba(120,150,95,${alpha})`;
+  ctx.lineWidth = 1.6;
+  const n = Math.round(w * h / 60000) + 3;
+  for (let b = 0; b < n; b++) {
+    let x = r() * w, y = r() * h, a = r() * Math.PI * 2;
+    const len = 8 + Math.floor(r() * 8);
+    ctx.beginPath(); ctx.moveTo(x, y);
+    const pts = [];
+    for (let i = 0; i < len; i++) {
+      a += (r() - .5) * .5;
+      x += Math.cos(a) * 22; y += Math.sin(a) * 22;
+      ctx.lineTo(x, y); pts.push([x, y, a]);
+    }
+    ctx.stroke();
+    pts.forEach(([px, py, pa], i) => {
+      const side = i % 2 ? 1 : -1;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(pa + side * .9);
+      ctx.beginPath(); ctx.ellipse(18, 0, 18, 5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(32, 0); ctx.stroke();
+      ctx.restore();
+      if (r() < .3) {
+        ctx.beginPath(); ctx.ellipse(px + side * 10, py + 12, 9, 12, pa, 0, Math.PI * 2); ctx.stroke();
+      }
+    });
+  }
+  ctx.restore();
+}
+
+function logo(ctx, cx, baseY, px, ink, green, glow) {
+  const letters = ["L", "A", "O", "L", "I", "V", "A"];
+  ctx.font = `300 ${px}px ${F_LOGO}`;
+  const sp = px * .3, oW = px * .74;
+  const widths = letters.map(l => l === "O" ? oW : ctx.measureText(l).width);
+  const total = widths.reduce((a, b) => a + b, 0) + sp * (letters.length - 1);
+  let x = cx - total / 2;
+  const cap = px * .7;
+  const passes = glow ? 2 : 1;
+  for (let p = 0; p < passes; p++) {
+    let xx = x;
+    letters.forEach((l, i) => {
+      if (glow) { ctx.shadowColor = l === "O" ? green : glow; ctx.shadowBlur = p ? 12 : 34; }
+      if (l === "O") {
+        const r = cap * .52, ocx = xx + oW / 2, ocy = baseY - cap / 2;
+        ctx.strokeStyle = green; ctx.lineWidth = px * .075;
+        ctx.beginPath(); ctx.arc(ocx, ocy, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = px * .045;
+        ctx.beginPath(); ctx.moveTo(ocx, ocy - r); ctx.quadraticCurveTo(ocx + r * .05, ocy - r * 1.3, ocx + r * .2, ocy - r * 1.45); ctx.stroke();
+        ctx.save();
+        ctx.translate(ocx + r * .62, ocy - r * 1.42);
+        ctx.rotate(rad(-18));
+        ctx.beginPath(); ctx.ellipse(0, 0, r * .42, r * .17, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = ink;
+        ctx.fillText(l, xx, baseY);
+      }
+      xx += widths[i] + sp;
+    });
+  }
+  ctx.shadowBlur = 0;
+  return total;
+}
+
+function drawPizzaBoard() {
+  const W = 1600, H = 560;
+  const { cv, ctx } = canvas(W, H, 2);
+  ctx.fillStyle = "#f2f3ef"; ctx.fillRect(0, 0, W, H);
+  olives(ctx, W, H, 11);
+  logo(ctx, 210, 70, 58, INK, GREEN);
+  ctx.font = `400 17px ${F_LOGO}`; ctx.fillStyle = "#555"; ctx.textAlign = "center";
+  ctx.fillText("PIZZERIA  DAL  2020", 210, 98);
+  ctx.textAlign = "center"; ctx.fillStyle = "#1e1e1e"; ctx.font = `700 84px ${F_HEAD}`;
+  ctx.fillText("PIZZE", W / 2, 88);
+  ctx.textAlign = "right"; ctx.font = `500 19px ${F_ITEM}`; ctx.fillStyle = "#333";
+  ctx.fillText(PIZZA_NOTE, W - 36, 84);
+  ctx.textAlign = "left";
+
+  const bx = 18, by = 112, bw = W - 36, bh = H - by - 16;
+  ctx.fillStyle = "rgba(255,255,255,.55)";
+  roundRect(ctx, bx, by, bw, bh, 16); ctx.fill();
+  ctx.strokeStyle = GREEN; ctx.lineWidth = 6; ctx.stroke();
+
+  const cols = [PIZZE.slice(0, 5), PIZZE.slice(5, 10), PIZZE.slice(10, 15), PIZZE.slice(15, 20)];
+  const colW = (bw - 40) / 4, inner = colW - 28;
+  let k = 1;
+  const measure = kk => {
+    let maxH = 0;
+    for (const col of cols) {
+      ctx.font = `500 ${17 * kk}px ${F_ITEM}`;
+      let h = 0;
+      for (const it of col) h += 27 * kk + wrap(ctx, it[2], inner).length * 20 * kk + 13 * kk;
+      maxH = Math.max(maxH, h);
+    }
+    return maxH;
+  };
+  k = 1.3;
+  while (measure(k) > bh - 30 && k > .6) k -= .02;
+  cols.forEach((col, ci) => {
+    const x0 = bx + 22 + ci * colW;
+    let y = by + 18;
+    for (const it of col) {
+      ctx.font = `600 ${24 * k}px ${F_ITEM}`; ctx.fillStyle = "#1c1c1c";
+      y += 24 * k;
+      ctx.fillText(it[0], x0, y);
+      ctx.textAlign = "right"; ctx.fillText(it[1], x0 + inner, y); ctx.textAlign = "left";
+      y += 3 * k;
+      ctx.font = `500 ${17 * k}px ${F_ITEM}`; ctx.fillStyle = DESC;
+      for (const l of wrap(ctx, it[2], inner)) { y += 20 * k; ctx.fillText(l, x0, y); }
+      y += 13 * k;
+    }
+    if (ci > 0) {
+      ctx.strokeStyle = "rgba(108,191,85,.35)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x0 - 14, by + 22); ctx.lineTo(x0 - 14, by + bh - 22); ctx.stroke();
+    }
+  });
+  return cv;
+}
+
+function chalkBg(ctx, W, H, seed) {
+  ctx.fillStyle = "#26352c"; ctx.fillRect(0, 0, W, H);
+  const r = makeRand(seed);
+  for (let i = 0; i < 260; i++) {
+    ctx.strokeStyle = `rgba(255,255,255,${r() * .05})`;
+    ctx.lineWidth = 8 + r() * 30;
+    ctx.beginPath();
+    const x = r() * W, y = r() * H;
+    ctx.moveTo(x, y); ctx.lineTo(x + (r() - .5) * 160, y + (r() - .5) * 40);
+    ctx.stroke();
+  }
+}
+
+function drawChalkboard() {
+  const W = 760, H = 600;
+  const { cv, ctx } = canvas(W, H, 2.6);
+  chalkBg(ctx, W, H, 4);
+  const chalk = "#f3f0e6", yellow = "#ffe27a", soft = "rgba(243,240,230,.82)";
+  let k = 1.15;
+  const layout = (draw) => {
+    let y = 0;
+    const head = t => {
+      ctx.font = `700 ${62 * k}px ${F_HEAD}`; y += 60 * k;
+      if (draw) {
+        ctx.fillStyle = chalk; ctx.textAlign = "center"; ctx.fillText(t, W / 2, y); ctx.textAlign = "left";
+        ctx.strokeStyle = "rgba(243,240,230,.6)"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(W / 2 - 90, y + 8); ctx.quadraticCurveTo(W / 2, y + 16, W / 2 + 90, y + 6); ctx.stroke();
+      }
+      y += 18 * k;
+    };
+    const item = (it, x, w, yy) => {
+      let iy = yy;
+      ctx.font = `700 ${30 * k}px ${F_CHALK}`; iy += 28 * k;
+      if (draw) {
+        ctx.fillStyle = chalk; ctx.fillText(it[0], x, iy);
+        ctx.fillStyle = yellow; ctx.textAlign = "right"; ctx.fillText(it[1], x + w, iy); ctx.textAlign = "left";
+      }
+      ctx.font = `400 ${22 * k}px ${F_CHALK}`;
+      for (const l of wrap(ctx, it[2], w)) { iy += 22 * k; if (draw) { ctx.fillStyle = soft; ctx.fillText(l, x, iy); } }
+      return iy + 12 * k;
+    };
+    y += 4;
+    head("PASTA");
+    const pw = (W - 90) / 2;
+    const p1 = item(PASTA[0], 30, pw, y), p2 = item(PASTA[1], 60 + pw, pw, y);
+    y = Math.max(p1, p2) + 4 * k;
+    head("INSALATE");
+    let yl = y, yr = y;
+    INSALATE.forEach((it, i) => {
+      if (i % 2 === 0) yl = item(it, 30, pw, yl); else yr = item(it, 60 + pw, pw, yr);
+    });
+    y = Math.max(yl, yr) + 6 * k;
+    ctx.font = `700 ${26 * k}px ${F_CHALK}`;
+    y += 24 * k;
+    if (draw) {
+      ctx.fillStyle = chalk; ctx.textAlign = "center";
+      ctx.fillText("Dressings zur Auswahl  ·  Hausdressing  oder  Essig + Öl", W / 2, y);
+      ctx.textAlign = "left";
+    }
+    return y + 14;
+  };
+  while (layout(false) > H && k > .6) k -= .02;
+  layout(true);
+  return cv;
+}
+
+function drawDrinks() {
+  const W = 420, H = 560;
+  const { cv, ctx } = canvas(W, H, 2.6);
+  ctx.fillStyle = "#f2f3ef"; ctx.fillRect(0, 0, W, H);
+  olives(ctx, W, H, 23);
+  ctx.fillStyle = "#1e1e1e"; ctx.textAlign = "center"; ctx.font = `700 76px ${F_HEAD}`;
+  ctx.fillText("GETRÄNKE", W / 2, 76);
+  const bx = 18, by = 96, bw = W - 36, bh = 378;
+  ctx.fillStyle = "rgba(255,255,255,.6)"; roundRect(ctx, bx, by, bw, bh, 14); ctx.fill();
+  ctx.strokeStyle = GREEN; ctx.lineWidth = 5; ctx.stroke();
+  ctx.font = `500 27px ${F_ITEM}`; ctx.fillStyle = "#1c1c1c";
+  DRINKS.forEach((d, i) => {
+    const y = by + 44 + i * 39;
+    ctx.textAlign = "left"; ctx.fillText(d[0], bx + 22, y);
+    ctx.textAlign = "right"; ctx.fillText(d[1], bx + bw - 22, y);
+  });
+  ctx.textAlign = "center"; ctx.fillStyle = "#222";
+  ctx.font = `600 26px ${F_ITEM}`; ctx.fillText("www.laoliva.de", W / 2, 516);
+  ctx.font = `500 17px ${F_ITEM}`; ctx.fillText("Allergene und Zusatzstoffe separat gelistet", W / 2, 542);
+  return cv;
+}
+
+function drawTagline() {
+  const W = 1100, H = 115;
+  const { cv, ctx } = canvas(W, H, 2);
+  ctx.fillStyle = "#f2f3ef"; ctx.fillRect(0, 0, W, H);
+  olives(ctx, W, H, 31, .22);
+  ctx.fillStyle = "#151515"; ctx.textAlign = "center";
+  ctx.font = `34px ${F_SCRIPT}`;
+  ctx.fillText("Handverlesene Zutaten direkt von Produzenten aus Italien", W / 2, 48);
+  ctx.fillText("& Leidenschaft für neapolitanisches Handwerk", W / 2, 94);
+  return cv;
+}
+
+function drawAFrame() {
+  const W = 360, H = 500;
+  const { cv, ctx } = canvas(W, H, 2.6);
+  chalkBg(ctx, W, H, 9);
+  ctx.textAlign = "center";
+  logo(ctx, W / 2, 72, 44, "#f3f0e6", GREEN);
+  ctx.font = `400 14px ${F_LOGO}`; ctx.fillStyle = "#e8e4d8";
+  ctx.fillText("PIZZERIA  DAL  2020", W / 2, 96);
+  ctx.strokeStyle = GREEN; ctx.lineWidth = 3;
+  roundRect(ctx, 22, 118, W - 44, 92, 12); ctx.stroke();
+  ctx.fillStyle = "#ffe27a"; ctx.font = `700 31px ${F_CHALK}`;
+  ctx.fillText("Schüler und Studenten", W / 2, 156);
+  ctx.fillText("erhalten 10% Rabatt", W / 2, 192);
+  ctx.fillStyle = "#f3f0e6"; ctx.font = `700 28px ${F_HEAD}`;
+  ctx.fillText("ANRUFEN  ·  ABHOLEN  ·  GENIESSEN", W / 2, 250);
+  ctx.font = `700 30px ${F_CHALK}`;
+  ctx.fillText("Tel. 06131 2106696", W / 2, 290);
+  ctx.font = `400 25px ${F_CHALK}`;
+  ctx.fillText("Montag bis Samstag", W / 2, 336);
+  ctx.fillText("11.30 bis 15.00 Uhr", W / 2, 364);
+  ctx.fillText("und 17.00 bis 22.00 Uhr", W / 2, 392);
+  ctx.fillText("Sonntag 13.00 bis 21.00 Uhr", W / 2, 428);
+  ctx.font = `700 24px ${F_CHALK}`; ctx.fillStyle = "#cfe8c4";
+  ctx.fillText("@laoliva.official", W / 2, 474);
+  return cv;
+}
+
+function drawNeon() {
+  const W = 1100, H = 300;
+  const { cv, ctx } = canvas(W, H, 2);
+  ctx.textBaseline = "alphabetic";
+  logo(ctx, W / 2, 225, 165, "#fffdf2", "#7dff5c", "#fff3b0");
+  logo(ctx, W / 2, 225, 165, "#ffffff", "#a8ff8c", null);
+  return cv;
+}
+
+function drawSubline() {
+  const W = 800, H = 70;
+  const { cv, ctx } = canvas(W, H, 2);
+  ctx.fillStyle = "#f4efe2"; ctx.textAlign = "center"; ctx.font = `400 44px ${F_LOGO}`;
+  ctx.fillText("PIZZERIA  DAL  2020", W / 2, 50);
+  ctx.strokeStyle = "#f4efe2"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(40, 34); ctx.lineTo(150, 34); ctx.moveTo(W - 150, 34); ctx.lineTo(W - 40, 34); ctx.stroke();
+  return cv;
+}
+
+function plain(w, h, fn) {
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const c = cv.getContext("2d");
+  fn(c, w, h);
+  return cv;
+}
+
+function drawTiles() {
+  return plain(512, 512, (c) => {
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      c.fillStyle = (x + y) % 2 ? "#c9643f" : "#efe6d2";
+      c.fillRect(x * 64, y * 64, 64, 64);
+    }
+    c.strokeStyle = "rgba(0,0,0,.12)"; c.lineWidth = 2;
+    for (let i = 0; i <= 8; i++) { c.beginPath(); c.moveTo(i * 64, 0); c.lineTo(i * 64, 512); c.moveTo(0, i * 64); c.lineTo(512, i * 64); c.stroke(); }
+  });
+}
+
+function drawGrass() {
+  return plain(512, 512, (c) => {
+    c.fillStyle = "#6aa84f"; c.fillRect(0, 0, 512, 512);
+    const r = makeRand(3);
+    for (let i = 0; i < 6000; i++) {
+      c.fillStyle = r() < .5 ? "rgba(40,90,30,.25)" : "rgba(170,220,120,.18)";
+      c.fillRect(r() * 512, r() * 512, 2, 4);
+    }
+  });
+}
+
+function drawPavement() {
+  return plain(512, 512, (c) => {
+    c.fillStyle = "#b9b4aa"; c.fillRect(0, 0, 512, 512);
+    c.strokeStyle = "rgba(60,55,50,.35)"; c.lineWidth = 3;
+    for (let i = 0; i <= 4; i++) { c.beginPath(); c.moveTo(i * 128, 0); c.lineTo(i * 128, 512); c.moveTo(0, i * 128); c.lineTo(512, i * 128); c.stroke(); }
+  });
+}
+
+function drawStripes() {
+  return plain(512, 64, (c) => {
+    for (let i = 0; i < 16; i++) { c.fillStyle = i % 2 ? "#f6f4ec" : "#4f9a3f"; c.fillRect(i * 32, 0, 32, 64); }
+  });
+}
+
+function drawPizzaTop() {
+  return plain(256, 256, (c) => {
+    c.fillStyle = "#e3b56b"; c.beginPath(); c.arc(128, 128, 126, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#c33a22"; c.beginPath(); c.arc(128, 128, 104, 0, Math.PI * 2); c.fill();
+    const r = makeRand(8);
+    for (let i = 0; i < 9; i++) { c.fillStyle = "#fbf6e8"; c.beginPath(); c.arc(70 + r() * 116, 70 + r() * 116, 12 + r() * 8, 0, Math.PI * 2); c.fill(); }
+    for (let i = 0; i < 7; i++) { c.fillStyle = "#2f7d32"; c.beginPath(); c.ellipse(70 + r() * 116, 70 + r() * 116, 9, 5, r() * 3, 0, Math.PI * 2); c.fill(); }
+  });
+}
+
+const SKIN = "#e2b08c";
+
+function drawUndershirt(front) {
+  return plain(220, 200, (c, w, h) => {
+    c.fillStyle = SKIN; c.fillRect(0, 0, w, h);
+    c.fillStyle = "#f6f3e8";
+    c.fillRect(0, 60, w, h - 60);
+    c.fillRect(26, 0, 46, 76);
+    c.fillRect(148, 0, 46, 76);
+    c.fillStyle = SKIN;
+    c.beginPath(); c.ellipse(110, 8, front ? 40 : 30, front ? 66 : 40, 0, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = "rgba(0,0,0,.07)"; c.lineWidth = 2;
+    for (let x = 6; x < w; x += 9) { c.beginPath(); c.moveTo(x, 70); c.lineTo(x, h); c.stroke(); }
+    if (front) {
+      c.fillStyle = "#3b2a1c";
+      const r = makeRand(5);
+      for (let i = 0; i < 40; i++) c.fillRect(92 + r() * 36, 26 + r() * 34, 2, 3);
+      c.strokeStyle = "#d4af37"; c.lineWidth = 4;
+      c.beginPath(); c.arc(110, 4, 50, rad(28), rad(152)); c.stroke();
+      c.fillStyle = "#e8c24a"; c.beginPath(); c.arc(110, 58, 6, 0, Math.PI * 2); c.fill();
+      const stain = (x, y, s) => {
+        c.fillStyle = "#dca11a";
+        for (let i = 0; i < 7; i++) { c.beginPath(); c.arc(x + (r() - .5) * s, y + (r() - .5) * s * .7, s * (.25 + r() * .3), 0, Math.PI * 2); c.fill(); }
+        c.fillStyle = "rgba(150,95,10,.35)";
+        c.beginPath(); c.arc(x + s * .2, y + s * .1, s * .25, 0, Math.PI * 2); c.fill();
+      };
+      stain(70, 112, 26); stain(150, 150, 20); stain(118, 182, 14);
+      c.fillStyle = "#dca11a"; c.fillRect(66, 120, 6, 22); c.beginPath(); c.arc(69, 144, 4, 0, Math.PI * 2); c.fill();
+    } else {
+      c.fillStyle = "#dca11a"; c.beginPath(); c.arc(160, 150, 9, 0, Math.PI * 2); c.fill();
+    }
+  });
+}
+
+function drawShirtSide() {
+  return plain(110, 200, (c, w, h) => {
+    c.fillStyle = "#f6f3e8"; c.fillRect(0, 0, w, h);
+    c.fillStyle = SKIN; c.beginPath(); c.ellipse(55, 0, 38, 66, 0, 0, Math.PI * 2); c.fill();
+  });
+}
+
+function heart(c, x, y, s) {
+  c.beginPath();
+  c.moveTo(x, y + s * .3);
+  c.bezierCurveTo(x, y, x - s * .5, y, x - s * .5, y + s * .3);
+  c.bezierCurveTo(x - s * .5, y + s * .6, x, y + s * .8, x, y + s);
+  c.bezierCurveTo(x, y + s * .8, x + s * .5, y + s * .6, x + s * .5, y + s * .3);
+  c.bezierCurveTo(x + s * .5, y, x, y, x, y + s * .3);
+  c.fill();
+}
+
+function drawHearts() {
+  return plain(128, 128, (c, w, h) => {
+    c.fillStyle = "#d8283c"; c.fillRect(0, 0, w, h);
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
+      c.fillStyle = (x + y) % 2 ? "#ffd1dc" : "#ffffff";
+      heart(c, 16 + x * 32 + (y % 2) * 8, 8 + y * 32, 16);
+    }
+  });
+}
+
+function drawHairyLeg() {
+  return plain(64, 128, (c, w, h) => {
+    c.fillStyle = SKIN; c.fillRect(0, 0, w, h);
+    const r = makeRand(12);
+    c.fillStyle = "rgba(60,40,25,.55)";
+    for (let i = 0; i < 160; i++) c.fillRect(r() * w, r() * h * .8, 1.2, 3);
+  });
+}
+
+function drawFace(mustache) {
+  return plain(120, 110, (c, w, h) => {
+    c.fillStyle = SKIN; c.fillRect(0, 0, w, h);
+    const r = makeRand(7);
+    if (!mustache) {
+      for (let i = 0; i < 600; i++) { c.fillStyle = "rgba(40,25,15,.33)"; c.fillRect(14 + r() * 92, 62 + r() * 46, 1.6, 1.6); }
+    }
+    c.fillStyle = "#2a1c12";
+    c.fillRect(24, 28, 28, 6); c.fillRect(68, 28, 28, 6);
+    c.fillStyle = "#fff"; c.fillRect(28, 40, 20, 11); c.fillRect(72, 40, 20, 11);
+    c.fillStyle = "#3b2414"; c.fillRect(34, 40, 9, 11); c.fillRect(77, 40, 9, 11);
+    if (mustache) {
+      c.fillStyle = "#151010";
+      c.beginPath();
+      c.moveTo(60, 68);
+      c.bezierCurveTo(42, 62, 22, 70, 16, 86);
+      c.bezierCurveTo(30, 78, 46, 82, 60, 76);
+      c.bezierCurveTo(74, 82, 90, 78, 104, 86);
+      c.bezierCurveTo(98, 70, 78, 62, 60, 68);
+      c.fill();
+      c.fillStyle = "#a0453a"; c.fillRect(48, 90, 24, 5);
+    } else {
+      c.fillStyle = "#8a4a3a"; c.fillRect(44, 86, 32, 5);
+    }
+  });
+}
+
+function drawChefJacket(front) {
+  return plain(200, 190, (c, w, h) => {
+    c.fillStyle = "#fbfbf8"; c.fillRect(0, 0, w, h);
+    if (front) {
+      c.fillStyle = "#222";
+      for (let i = 0; i < 4; i++) { c.beginPath(); c.arc(72, 50 + i * 36, 5, 0, Math.PI * 2); c.fill(); c.beginPath(); c.arc(128, 50 + i * 36, 5, 0, Math.PI * 2); c.fill(); }
+      c.strokeStyle = "rgba(0,0,0,.12)"; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(100, 30); c.lineTo(100, h); c.stroke();
+    }
+  });
+}
+
+function drawChecks() {
+  return plain(64, 64, (c) => {
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { c.fillStyle = (x + y) % 2 ? "#1d1d1d" : "#f4f4f4"; c.fillRect(x * 8, y * 8, 8, 8); }
+  });
+}
+
+function tex(cv, renderer) {
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+async function init() {
+  await Promise.all([
+    document.fonts.load(`700 40px ${F_HEAD}`),
+    document.fonts.load(`500 20px ${F_ITEM}`),
+    document.fonts.load(`600 20px ${F_ITEM}`),
+    document.fonts.load(`300 40px ${F_LOGO}`),
+    document.fonts.load(`400 40px ${F_LOGO}`),
+    document.fonts.load(`30px ${F_SCRIPT}`),
+    document.fonts.load(`400 30px ${F_CHALK}`),
+    document.fonts.load(`700 30px ${F_CHALK}`)
+  ]).catch(() => {});
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color("#9fd3f5");
+  scene.fog = new THREE.Fog("#9fd3f5", 60, 170);
+  const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 400);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x7a6a50, 1.25));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+  const sun = new THREE.DirectionalLight(0xfff4e0, 1.6);
+  sun.position.set(30, 50, 40);
+  scene.add(sun);
+
+  const T = cv => tex(cv, renderer);
+  const lam = c => new THREE.MeshLambertMaterial({ color: c });
+  const solids = [];
+  const boxes = [];
+  function collide(minX, maxX, minZ, maxZ) { boxes.push({ minX, maxX, minZ, maxZ }); }
+  function box(w, h, d, mat, x, y, z, solid) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    scene.add(m);
+    if (solid) solids.push(m);
+    return m;
+  }
+
+  const grassTex = T(drawGrass()); grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping; grassTex.repeat.set(40, 40);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ map: grassTex }));
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  const paveTex = T(drawPavement()); paveTex.wrapS = paveTex.wrapT = THREE.RepeatWrapping; paveTex.repeat.set(10, 4);
+  const pave = new THREE.Mesh(new THREE.PlaneGeometry(36, 14), new THREE.MeshLambertMaterial({ map: paveTex }));
+  pave.rotation.x = -Math.PI / 2; pave.position.set(0, 0.01, BD + 7);
+  scene.add(pave);
+
+  const tileTex = T(drawTiles()); tileTex.wrapS = tileTex.wrapT = THREE.RepeatWrapping; tileTex.repeat.set(5.5, 4);
+  const inFloor = new THREE.Mesh(new THREE.PlaneGeometry(BW * 2, BD * 2), new THREE.MeshLambertMaterial({ map: tileTex }));
+  inFloor.rotation.x = -Math.PI / 2; inFloor.position.y = 0.015;
+  scene.add(inFloor);
+
+  const plaster = lam("#efe4cc");
+  const wainscot = lam("#5e8f4b");
+  box(BW * 2 + WT, BH, WT, plaster, 0, BH / 2, -BD, true); collide(-BW - WT, BW + WT, -BD - WT, -BD + WT);
+  box(WT, BH, BD * 2 + WT, plaster, -BW, BH / 2, 0, true); collide(-BW - WT, -BW + WT, -BD - WT, BD + WT);
+  box(WT, BH, BD * 2 + WT, plaster, BW, BH / 2, 0, true); collide(BW - WT, BW + WT, -BD - WT, BD + WT);
+
+  const glassMat = new THREE.MeshBasicMaterial({ color: "#bfe3f2", transparent: true, opacity: .28, depthWrite: false, side: THREE.DoubleSide });
+  const frameMat = lam("#2f3b2a");
+  const DOOR = 1.7, DOOR_H = 3.7;
+  const segs = [[-BW, -8.2, false], [-8.2, -3.6, true], [-3.6, -DOOR, false], [DOOR, 3.6, false], [3.6, 8.2, true], [8.2, BW, false]];
+  for (const [a, b, win] of segs) {
+    const w = b - a, cx = (a + b) / 2;
+    if (!win) {
+      box(w, BH, WT, plaster, cx, BH / 2, BD, true);
+    } else {
+      box(w, 1.0, WT, plaster, cx, 0.5, BD, true);
+      box(w, BH - 3.4, WT, plaster, cx, 3.4 + (BH - 3.4) / 2, BD, true);
+      const g = new THREE.Mesh(new THREE.PlaneGeometry(w, 2.4), glassMat);
+      g.position.set(cx, 2.2, BD);
+      scene.add(g); solids.push(g);
+      box(w, 0.12, 0.4, frameMat, cx, 1.02, BD, false);
+      box(w, 0.12, 0.4, frameMat, cx, 3.38, BD, false);
+      box(0.12, 2.4, 0.4, frameMat, a + 0.06, 2.2, BD, false);
+      box(0.12, 2.4, 0.4, frameMat, b - 0.06, 2.2, BD, false);
+      box(0.08, 2.4, 0.36, frameMat, cx, 2.2, BD, false);
+    }
+    collide(a, b, BD - WT, BD + WT);
+  }
+  box(DOOR * 2, BH - DOOR_H, WT, plaster, 0, DOOR_H + (BH - DOOR_H) / 2, BD, true);
+  box(0.25, DOOR_H, 0.5, frameMat, -DOOR + 0.12, DOOR_H / 2, BD, false);
+  box(0.25, DOOR_H, 0.5, frameMat, DOOR - 0.12, DOOR_H / 2, BD, false);
+  box(DOOR * 2, 0.25, 0.5, frameMat, 0, DOOR_H - 0.12, BD, false);
+
+  for (const [w, d, x, z] of [[BW * 2 - 0.3, 0.06, 0, -BD + 0.18], [BW * 2 - 0.3, 0.06, 0, BD - 0.18], [0.06, BD * 2 - 0.3, -BW + 0.18, 0], [0.06, BD * 2 - 0.3, BW - 0.18, 0]]) {
+    box(w, 1.2, d, wainscot, x, 0.6, z, false);
+  }
+
+  const ceil = box(BW * 2 + 0.6, 0.3, BD * 2 + 0.6, lam("#f3ecdc"), 0, BH + 0.15, 0, true);
+  box(BW * 2 + 1.2, 0.5, BD * 2 + 1.2, lam("#5c6b4f"), 0, BH + 0.45, 0, false);
+
+  const awningTex = T(drawStripes()); awningTex.wrapS = THREE.RepeatWrapping; awningTex.repeat.set(4, 1);
+  const awningMat = new THREE.MeshLambertMaterial({ map: awningTex, side: THREE.DoubleSide });
+  const awning = new THREE.Mesh(new THREE.BoxGeometry(18.4, 0.06, 1.8), awningMat);
+  awning.position.set(0, 4.15, BD + 0.95);
+  awning.rotation.x = 0.33;
+  scene.add(awning); solids.push(awning);
+  const valance = new THREE.Mesh(new THREE.BoxGeometry(18.4, 0.35, 0.04), awningMat);
+  valance.position.set(0, 3.65, BD + 1.8);
+  scene.add(valance);
+
+  box(13.2, 3.4, 0.2, lam("#1f2a1e"), 0, 7.0, BD + 0.25, false);
+  const neon = new THREE.Mesh(new THREE.PlaneGeometry(12, 3.27), new THREE.MeshBasicMaterial({ map: T(drawNeon()), transparent: true, depthWrite: false, toneMapped: false }));
+  neon.position.set(0, 7.1, BD + 0.37);
+  scene.add(neon);
+  const sub = new THREE.Mesh(new THREE.PlaneGeometry(6, 0.53), new THREE.MeshBasicMaterial({ map: T(drawSubline()), transparent: true, depthWrite: false }));
+  sub.position.set(0, 5.0, BD + 0.17);
+  scene.add(sub);
+  const neonLight = new THREE.PointLight(0xc8ffb8, 30, 16, 2);
+  neonLight.position.set(0, 7, BD + 2.5);
+  scene.add(neonLight);
+
+  const pizzaBoard = new THREE.Mesh(new THREE.PlaneGeometry(16, 5.6), new THREE.MeshBasicMaterial({ map: T(drawPizzaBoard()) }));
+  pizzaBoard.position.set(0, 6.55, -BD + 0.27);
+  scene.add(pizzaBoard);
+  box(16.3, 5.9, 0.1, lam("#3a2a1c"), 0, 6.55, -BD + 0.2, false);
+
+  const chalk = new THREE.Mesh(new THREE.PlaneGeometry(7.6, 6.0), new THREE.MeshBasicMaterial({ map: T(drawChalkboard()) }));
+  chalk.position.set(-BW + 0.3, 4.2, -0.6);
+  chalk.rotation.y = Math.PI / 2;
+  scene.add(chalk);
+  box(0.12, 6.36, 7.96, lam("#7a5232"), -BW + 0.22, 4.2, -0.6, false);
+
+  const drinks = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 5.6), new THREE.MeshBasicMaterial({ map: T(drawDrinks()) }));
+  drinks.position.set(BW - 0.3, 4.2, -1.5);
+  drinks.rotation.y = -Math.PI / 2;
+  scene.add(drinks);
+  box(0.12, 5.9, 4.5, lam("#3a2a1c"), BW - 0.22, 4.2, -1.5, false);
+
+  const counterMats = (() => {
+    const wood = lam("#7a5232");
+    const front = new THREE.MeshBasicMaterial({ map: T(drawTagline()) });
+    return [wood, wood, lam("#e9e7e2"), wood, front, wood];
+  })();
+  const counter = box(11, 1.15, 1.2, counterMats, 0, 0.575, -3.7, true);
+  box(11.3, 0.1, 1.45, lam("#f1efea"), 0, 1.2, -3.7, true);
+  collide(-5.65, 5.65, -4.45, -2.95);
+  const pizzaMat = new THREE.MeshLambertMaterial({ map: T(drawPizzaTop()) });
+  for (const px of [-3.2, 2.8]) {
+    const board = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.05, 32), lam("#b88a5a"));
+    board.position.set(px, 1.28, -3.7); scene.add(board);
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.04, 32), [lam("#d9a85e"), pizzaMat, lam("#d9a85e")]);
+    p.position.set(px, 1.32, -3.7); scene.add(p);
+  }
+
+  const brick = lam("#a7553a");
+  const oven = new THREE.Mesh(new THREE.SphereGeometry(2.2, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), brick);
+  oven.position.set(-8.5, 1.0, -5.9); oven.scale.set(1, 0.75, 1);
+  scene.add(oven); solids.push(oven);
+  box(4.6, 1.0, 3.6, lam("#8c8277"), -8.5, 0.5, -5.9, true);
+  const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.75, 24, 0, Math.PI), new THREE.MeshBasicMaterial({ color: "#ff8a2a" }));
+  mouth.position.set(-7.4, 1.02, -4.4);
+  mouth.rotation.y = rad(35);
+  scene.add(mouth);
+  const fire = new THREE.PointLight(0xff8a3a, 12, 6, 2);
+  fire.position.set(-7.2, 1.6, -4.0);
+  scene.add(fire);
+  collide(-10.9, -6.2, -7.9, -4.0);
+
+  const lampMat = lam("#2f3b2a"), bulbMat = new THREE.MeshBasicMaterial({ color: "#fff2cc" });
+  for (const lx of [-4, 0, 4]) {
+    box(0.03, 2.6, 0.03, lampMat, lx, BH - 1.3, -2.2, false);
+    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.45, 20, 1, true), new THREE.MeshLambertMaterial({ color: "#4f9a3f", side: THREE.DoubleSide }));
+    shade.position.set(lx, BH - 2.75, -2.2); scene.add(shade);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), bulbMat);
+    bulb.position.set(lx, BH - 2.95, -2.2); scene.add(bulb);
+    const pl = new THREE.PointLight(0xffe7c0, 28, 16, 2);
+    pl.position.set(lx, BH - 3.1, -2.2); scene.add(pl);
+  }
+  for (const [lx, lz] of [[-6, 4], [6, 4]]) {
+    const pl = new THREE.PointLight(0xffe7c0, 20, 14, 2);
+    pl.position.set(lx, BH - 1, lz); scene.add(pl);
+  }
+
+  const tableMat = lam("#f4f1ea"), metal = lam("#3a3a3a"), chairMat = lam("#4f9a3f");
+  for (const [tx, tz] of [[-6.5, 4.2], [6.5, 4.2], [7.2, 0.6]]) {
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.08, 28), tableMat);
+    top.position.set(tx, 1.1, tz); scene.add(top); solids.push(top);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.06, 10), metal);
+    leg.position.set(tx, 0.55, tz); scene.add(leg);
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 0.06, 18), metal);
+    foot.position.set(tx, 0.03, tz); scene.add(foot);
+    collide(tx - 0.8, tx + 0.8, tz - 0.8, tz + 0.8);
+    for (const sx of [-1, 1]) {
+      const cx = tx + sx * 1.35;
+      box(0.75, 0.08, 0.75, chairMat, cx, 0.75, tz, false);
+      box(0.08, 0.85, 0.75, chairMat, cx + sx * 0.34, 1.2, tz, false);
+      for (const [lx, lz] of [[-.3, -.3], [.3, -.3], [-.3, .3], [.3, .3]]) box(0.06, 0.75, 0.06, metal, cx + lx, 0.37, tz + lz, false);
+      collide(cx - 0.4, cx + 0.4, tz - 0.4, tz + 0.4);
+    }
+  }
+
+  function oliveTree(x, z, s) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z); g.scale.setScalar(s);
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.42, 0.9, 20), lam("#b8643c"));
+    pot.position.y = 0.45; g.add(pot);
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.13, 1.8, 8), lam("#7b6a55"));
+    trunk.position.y = 1.7; trunk.rotation.z = 0.12; g.add(trunk);
+    const r = makeRand(Math.round(x * 13 + z * 7 + 300));
+    for (let i = 0; i < 6; i++) {
+      const f = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 10), lam(i % 2 ? "#7d8f4e" : "#94a865"));
+      f.position.set((r() - .5) * 1.0, 2.6 + r() * 0.8, (r() - .5) * 1.0);
+      f.scale.set(1, 0.7, 1);
+      g.add(f);
+    }
+    scene.add(g);
+    collide(x - 0.6 * s, x + 0.6 * s, z - 0.6 * s, z + 0.6 * s);
+  }
+  oliveTree(-9.8, 6.6, 1); oliveTree(9.8, 6.6, 1);
+  oliveTree(-3.2, BD + 1.6, 0.9); oliveTree(3.2, BD + 1.6, 0.9);
+
+  function tree(x, z) {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 3, 10), lam("#6b4f36"));
+    trunk.position.set(x, 1.5, z); scene.add(trunk);
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(2.2, 16, 12), lam("#4f8a3a"));
+    crown.position.set(x, 4.4, z); scene.add(crown);
+    collide(x - 0.45, x + 0.45, z - 0.45, z + 0.45);
+  }
+  [[-22, 14], [21, 18], [-28, -12], [26, -16], [-14, 32], [16, 36]].forEach(([x, z]) => tree(x, z));
+
+  const aTex = T(drawAFrame());
+  const aFront = new THREE.MeshBasicMaterial({ map: aTex });
+  const aWood = lam("#7a5232");
+  const ag = new THREE.Group();
+  ag.position.set(5.2, 0, BD + 4.2);
+  for (const side of [1, -1]) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.1, 0.06), side === 1 ? [aWood, aWood, aWood, aWood, aFront, aWood] : aWood);
+    p.position.set(0, 1.0, side * 0.28);
+    p.rotation.x = side * 0.26;
+    ag.add(p);
+  }
+  scene.add(ag);
+  collide(4.4, 6.0, BD + 3.6, BD + 4.8);
+
+  function figure(cfg) {
+    const g = new THREE.Group();
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(cfg.tw, 0.95, cfg.td), cfg.torsoMats);
+    torso.position.y = 1.43; g.add(torso);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.55, 0.6), cfg.headMats);
+    head.position.y = 2.18; g.add(head);
+    const limb = (mats, x, y, w, h, d) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, y, 0);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
+      m.position.y = -h / 2;
+      pivot.add(m);
+      g.add(pivot);
+      return pivot;
+    };
+    const legL = limb(cfg.legMats, -0.25, 0.95, cfg.legW, 0.95, 0.42);
+    const legR = limb(cfg.legMats, 0.25, 0.95, cfg.legW, 0.95, 0.42);
+    const armL = limb(cfg.armMats, -(cfg.tw / 2 + 0.24), 1.88, 0.46, 0.95, 0.44);
+    const armR = limb(cfg.armMats, cfg.tw / 2 + 0.24, 1.88, 0.46, 0.95, 0.44);
+    return { g, legL, legR, armL, armR, head };
+  }
+
+  const skinMat = lam(SKIN);
+  const shirtSide = T(drawShirtSide());
+  const shirtMat = (cv) => new THREE.MeshLambertMaterial({ map: T(cv) });
+  const heartsTex = T(drawHearts());
+  heartsTex.wrapS = heartsTex.wrapT = THREE.RepeatWrapping;
+  const heartsMat = new THREE.MeshLambertMaterial({ map: heartsTex });
+  const legSkin = new THREE.MeshLambertMaterial({ map: T(drawHairyLeg()) });
+  const hairMat = lam("#2a1c12");
+
+  const me = figure({
+    tw: 1.06, td: 0.6,
+    torsoMats: [new THREE.MeshLambertMaterial({ map: shirtSide }), new THREE.MeshLambertMaterial({ map: shirtSide }), skinMat, heartsMat, shirtMat(drawUndershirt(true)), shirtMat(drawUndershirt(false))],
+    headMats: [skinMat, skinMat, hairMat, skinMat, new THREE.MeshLambertMaterial({ map: T(drawFace(false)) }), skinMat],
+    legMats: [legSkin, legSkin, skinMat, skinMat, legSkin, legSkin],
+    legW: 0.44,
+    armMats: skinMat
+  });
+  const player = me.g;
+  const hairTop = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.12, 0.64), hairMat);
+  hairTop.position.y = 2.5; player.add(hairTop);
+  for (let i = 0; i < 5; i++) {
+    const tuft = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.14), hairMat);
+    tuft.position.set(-0.24 + i * 0.12, 2.6 + (i % 2) * 0.05, -0.1 + (i % 3) * 0.12);
+    tuft.rotation.z = (i - 2) * 0.2;
+    player.add(tuft);
+  }
+  const band = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.16, 0.62), heartsMat);
+  band.position.y = 0.95; player.add(band);
+  const sockMat = lam("#f4f4f4"), slipMat = lam("#1f3f8a"), strapMat = lam("#f4f4f4");
+  for (const leg of [me.legL, me.legR]) {
+    const shorts = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.42, 0.5), heartsMat);
+    shorts.position.y = -0.2; leg.add(shorts);
+    const sock = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.24, 0.44), sockMat);
+    sock.position.y = -0.8; leg.add(sock);
+    const slip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.66), slipMat);
+    slip.position.set(0, -0.92, 0.07); leg.add(slip);
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.08, 0.22), strapMat);
+    strap.position.set(0, -0.86, 0.14); leg.add(strap);
+  }
+  player.position.set(0, 0, BD + 11);
+  player.rotation.y = Math.PI;
+  scene.add(player);
+
+  const jacket = new THREE.MeshLambertMaterial({ color: "#fbfbf8" });
+  const checks = T(drawChecks()); checks.wrapS = checks.wrapT = THREE.RepeatWrapping; checks.repeat.set(2, 3);
+  const checkMat = new THREE.MeshLambertMaterial({ map: checks });
+  const chef = figure({
+    tw: 1.0, td: 0.55,
+    torsoMats: [jacket, jacket, jacket, jacket, new THREE.MeshLambertMaterial({ map: T(drawChefJacket(true)) }), jacket],
+    headMats: [skinMat, skinMat, skinMat, skinMat, new THREE.MeshLambertMaterial({ map: T(drawFace(true)) }), skinMat],
+    legMats: checkMat,
+    legW: 0.46,
+    armMats: jacket
+  });
+  chef.g.position.set(0, 0, -5.7);
+  scene.add(chef.g);
+  collide(-0.8, 0.8, -6.3, -5.1);
+  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.32, 20), jacket);
+  hat.position.y = 2.6; chef.g.add(hat);
+  const puff = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 12), jacket);
+  puff.position.y = 2.82; puff.scale.set(1, 0.5, 1); chef.g.add(puff);
+  const scarf = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.62), lam("#c8282d"));
+  scarf.position.y = 1.86; chef.g.add(scarf);
+  for (const arm of [chef.armL, chef.armR]) {
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.22, 0.34), skinMat);
+    hand.position.y = -1.02; arm.add(hand);
+  }
+  const dough = new THREE.Group();
+  const disk = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.04, 36), lam("#f2e2bc"));
+  dough.add(disk);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.06, 10, 36), lam("#e6cc94"));
+  rim.rotation.x = Math.PI / 2; dough.add(rim);
+  for (let i = 0; i < 6; i++) {
+    const spot = new THREE.Mesh(new THREE.CircleGeometry(0.06, 8), lam("#d9b878"));
+    spot.rotation.x = -Math.PI / 2;
+    spot.position.set(Math.cos(i) * 0.35, 0.025, Math.sin(i * 1.7) * 0.35);
+    dough.add(spot);
+  }
+  chef.g.add(dough);
+
+  let yaw = 0, pitch = 0.14, dist = 7;
+  let vy = 0, grounded = true, walkT = 0;
+  const keys = {};
+  addEventListener("keydown", e => { keys[e.code] = true; if (e.code === "Space") e.preventDefault(); });
+  addEventListener("keyup", e => { keys[e.code] = false; });
+  const startEl = document.getElementById("start");
+  document.getElementById("loading").style.display = "none";
+  startEl.style.display = "flex";
+  startEl.addEventListener("click", () => renderer.domElement.requestPointerLock());
+  document.addEventListener("pointerlockchange", () => { startEl.style.display = document.pointerLockElement ? "none" : "flex"; });
+  addEventListener("mousemove", e => {
+    if (!document.pointerLockElement) return;
+    yaw -= e.movementX * 0.0025;
+    pitch = Math.min(1.2, Math.max(-0.45, pitch + e.movementY * 0.0025));
+  });
+  addEventListener("wheel", e => { dist = Math.min(14, Math.max(2.5, dist + e.deltaY * 0.01)); });
+  addEventListener("resize", () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  const clock = new THREE.Clock();
+  const fwd = new THREE.Vector3(), right = new THREE.Vector3(), move = new THREE.Vector3();
+  const tgt = new THREE.Vector3(), off = new THREE.Vector3();
+  const rc = new THREE.Raycaster();
+  const PR = 0.45;
+  let time = 0;
+
+  function loop() {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    time += dt;
+    fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+    right.set(Math.cos(yaw), 0, -Math.sin(yaw));
+    move.set(0, 0, 0);
+    if (keys.KeyW || keys.ArrowUp) move.add(fwd);
+    if (keys.KeyS || keys.ArrowDown) move.sub(fwd);
+    if (keys.KeyD || keys.ArrowRight) move.add(right);
+    if (keys.KeyA || keys.ArrowLeft) move.sub(right);
+    const moving = move.lengthSq() > 0;
+    if (moving) {
+      move.normalize();
+      const sp = keys.ShiftLeft || keys.ShiftRight ? 10 : 5.5;
+      player.position.addScaledVector(move, sp * dt);
+      let d = Math.atan2(move.x, move.z) - player.rotation.y;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      player.rotation.y += d * Math.min(1, dt * 12);
+      walkT += dt * sp * 1.4;
+    }
+    for (let it = 0; it < 2; it++) {
+      for (const b of boxes) {
+        const px = player.position.x, pz = player.position.z;
+        if (px > b.minX - PR && px < b.maxX + PR && pz > b.minZ - PR && pz < b.maxZ + PR) {
+          const l = px - (b.minX - PR), r = (b.maxX + PR) - px, f = pz - (b.minZ - PR), k = (b.maxZ + PR) - pz;
+          const m = Math.min(l, r, f, k);
+          if (m === l) player.position.x -= l;
+          else if (m === r) player.position.x += r;
+          else if (m === f) player.position.z -= f;
+          else player.position.z += k;
+        }
+      }
+    }
+    player.position.x = Math.max(-150, Math.min(150, player.position.x));
+    player.position.z = Math.max(-150, Math.min(150, player.position.z));
+
+    if (keys.Space && grounded) { vy = 9; grounded = false; }
+    vy -= 25 * dt;
+    player.position.y += vy * dt;
+    if (player.position.y <= 0) { player.position.y = 0; vy = 0; grounded = true; }
+
+    const swing = moving && grounded ? Math.sin(walkT) * 0.7 : 0;
+    me.legL.rotation.x = swing; me.legR.rotation.x = -swing;
+    me.armL.rotation.x = -swing; me.armR.rotation.x = swing;
+    if (!grounded) me.armL.rotation.x = me.armR.rotation.x = -2.6;
+
+    const toss = Math.pow(Math.max(0, Math.sin(time * 1.6)), 2) * 0.35;
+    chef.armL.rotation.x = Math.PI - 0.05 + Math.sin(time * 9) * 0.04;
+    chef.armR.rotation.x = Math.PI - 0.05 - Math.sin(time * 9) * 0.04;
+    chef.armL.rotation.z = -0.22; chef.armR.rotation.z = 0.22;
+    dough.position.set(0, 3.3 + toss, 0);
+    dough.rotation.y += dt * 9;
+    dough.rotation.x = Math.sin(time * 2.3) * 0.12;
+    dough.rotation.z = Math.cos(time * 1.9) * 0.1;
+    chef.head.rotation.y = Math.sin(time * 0.7) * 0.25;
+
+    tgt.set(player.position.x, player.position.y + 2.3, player.position.z);
+    off.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).normalize();
+    rc.set(tgt, off); rc.far = dist;
+    const hits = rc.intersectObjects(solids, false);
+    let d2 = dist;
+    if (hits.length) d2 = Math.max(0.6, hits[0].distance - 0.3);
+    camera.position.copy(tgt).addScaledVector(off, d2);
+    if (camera.position.y < 0.3) camera.position.y = 0.3;
+    camera.lookAt(tgt);
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+  loop();
+}
+
+init();
+</script>
+</body>
+</html>
