@@ -2,12 +2,21 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>La Oliva Pizzeria</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Cabin+Condensed:wght@500;600&family=Josefin+Sans:wght@300;400&family=Kaushan+Script&family=Caveat:wght@400;700&family=Fredoka:wght@600&display=swap" rel="stylesheet">
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #9fd3f5; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9fd3f5; touch-action: none; -webkit-user-select: none; user-select: none; }
+  #joy {
+    position: fixed; left: 28px; bottom: 28px; width: 150px; height: 150px; border-radius: 50%;
+    background: rgba(255,255,255,.18); border: 3px solid rgba(255,255,255,.65);
+    display: none; touch-action: none; z-index: 5;
+  }
+  #knob {
+    position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px;
+    border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
   canvas { display: block; }
   #start {
     position: fixed; inset: 0;
@@ -34,9 +43,11 @@
 </head>
 <body>
 <div id="loading">Pizzeria wird gebacken</div>
+<div id="joy"><div id="knob"></div></div>
 <div id="start" style="display:none">
   <div class="big">Klicken zum Starten</div>
-  <div class="keys">
+  <div class="keys" id="touchkeys" style="display:none">Links mit dem Kreis laufen<br>Rechts wischen zum Umsehen</div>
+  <div class="keys" id="deskkeys">
     <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> laufen &nbsp; <kbd>Shift</kbd> rennen &nbsp; <kbd>Leertaste</kbd> springen<br>
     Maus umsehen &nbsp; Mausrad zoomen &nbsp; <kbd>Esc</kbd> Pause
   </div>
@@ -913,8 +924,57 @@ async function init() {
   const startEl = document.getElementById("start");
   document.getElementById("loading").style.display = "none";
   startEl.style.display = "flex";
-  startEl.addEventListener("click", () => renderer.domElement.requestPointerLock());
-  document.addEventListener("pointerlockchange", () => { startEl.style.display = document.pointerLockElement ? "none" : "flex"; });
+  const isTouch = matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
+  const joyEl = document.getElementById("joy"), knob = document.getElementById("knob");
+  const joy = { id: null, x: 0, y: 0 };
+  let lookId = null, lookX = 0, lookY = 0;
+  if (isTouch) {
+    startEl.querySelector(".big").textContent = "Tippen zum Starten";
+    document.getElementById("touchkeys").style.display = "block";
+    document.getElementById("deskkeys").style.display = "none";
+    startEl.addEventListener("click", () => { startEl.style.display = "none"; joyEl.style.display = "block"; });
+  } else {
+    startEl.addEventListener("click", () => renderer.domElement.requestPointerLock());
+    document.addEventListener("pointerlockchange", () => { startEl.style.display = document.pointerLockElement ? "none" : "flex"; });
+  }
+  const JR = 60;
+  function setJoy(t) {
+    const r = joyEl.getBoundingClientRect();
+    let dx = t.clientX - (r.left + r.width / 2), dy = t.clientY - (r.top + r.height / 2);
+    const m = Math.hypot(dx, dy);
+    if (m > JR) { dx *= JR / m; dy *= JR / m; }
+    joy.x = dx / JR; joy.y = dy / JR;
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  }
+  joyEl.addEventListener("touchstart", e => {
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    joy.id = t.identifier; setJoy(t);
+  }, { passive: false });
+  addEventListener("touchstart", e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== joy.id && lookId === null && startEl.style.display === "none") { lookId = t.identifier; lookX = t.clientX; lookY = t.clientY; }
+    }
+  }, { passive: true });
+  addEventListener("touchmove", e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier === joy.id) setJoy(t);
+      else if (t.identifier === lookId) {
+        yaw -= (t.clientX - lookX) * 0.006;
+        pitch = Math.min(1.2, Math.max(-0.45, pitch + (t.clientY - lookY) * 0.005));
+        lookX = t.clientX; lookY = t.clientY;
+      }
+    }
+  }, { passive: false });
+  const endTouch = e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joy.id) { joy.id = null; joy.x = joy.y = 0; knob.style.transform = ""; }
+      if (t.identifier === lookId) lookId = null;
+    }
+  };
+  addEventListener("touchend", endTouch);
+  addEventListener("touchcancel", endTouch);
   addEventListener("mousemove", e => {
     if (!document.pointerLockElement) return;
     yaw -= e.movementX * 0.0025;
@@ -944,10 +1004,15 @@ async function init() {
     if (keys.KeyS || keys.ArrowDown) move.sub(fwd);
     if (keys.KeyD || keys.ArrowRight) move.add(right);
     if (keys.KeyA || keys.ArrowLeft) move.sub(right);
+    let mag = 1;
+    if (joy.id !== null) {
+      const jm = Math.hypot(joy.x, joy.y);
+      if (jm > 0.12) { move.addScaledVector(fwd, -joy.y).addScaledVector(right, joy.x); mag = Math.min(1, jm); }
+    }
     const moving = move.lengthSq() > 0;
     if (moving) {
       move.normalize();
-      const sp = keys.ShiftLeft || keys.ShiftRight ? 10 : 5.5;
+      const sp = (keys.ShiftLeft || keys.ShiftRight ? 10 : 5.5) * mag;
       player.position.addScaledVector(move, sp * dt);
       let d = Math.atan2(move.x, move.z) - player.rotation.y;
       d = Math.atan2(Math.sin(d), Math.cos(d));
